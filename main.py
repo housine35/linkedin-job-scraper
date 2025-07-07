@@ -1,14 +1,16 @@
 import os
 from dotenv import load_dotenv
+from urllib.parse import quote_plus
 from scraper import scrape_all_jobs
 from database import save_jobs
 
 
 def main():
-    # Load the .env file
-    load_dotenv() 
+    # Charge .env uniquement en local (facultatif)
+    if os.getenv("GITHUB_ACTIONS") != "true":
+        load_dotenv()
 
-    # Read and convert environment variables
+    # Lire et convertir les variables d'environnement
     params = {
         "keyword": os.getenv("KEYWORD", "Scraping"),
         "location": os.getenv("LOCATION", "worldwide"),
@@ -29,26 +31,31 @@ def main():
         params["days"] = 30
         params["max_jobs"] = 50
 
-    # Read storage configuration
-    print("MONGO_URI:", os.getenv("MONGO_URI"))
-
+    # Configuration MongoDB sécurisée via secrets séparés
     storage_type = os.getenv("STORAGE_TYPE", "csv").lower()
-    mongo_uri = os.getenv("MONGO_URI", "mongodb://localhost:27017")
     db_name = os.getenv("MONGO_DB", "linkedin")
     collection_name = os.getenv("MONGO_COLLECTION", "scraping")
     output_file = os.getenv("OUTPUT_FILE", "jobs_output.csv")
 
-    # Display parameters used
+    mongo_uri = ""
+    if storage_type == "mongo":
+        mongo_user = os.getenv("MONGO_USER")
+        mongo_password = quote_plus(os.getenv("MONGO_PASSWORD", ""))
+        mongo_host = os.getenv("MONGO_HOST")
+        mongo_uri = f"mongodb+srv://{mongo_user}:{mongo_password}@{mongo_host}/{db_name}?retryWrites=true&w=majority"
+
+    # Afficher les paramètres utilisés
     print(
         f"Scraping with: keyword='{params['keyword']}', location='{params['location']}', "
         f"hours={params['hours']}, days={params['days']}, work_type='{params['work_type']}', "
         f"max_jobs={params['max_jobs']}, storage_type='{storage_type}'"
     )
+    print(f"Mongo URI used: {mongo_uri if mongo_uri else 'Not used'}")
 
-    # Start scraping
+    # Lancer le scraping
     jobs = scrape_all_jobs(**params)
 
-    # Save results
+    # Sauvegarder les résultats
     if jobs:
         save_jobs(jobs, storage_type, output_file, mongo_uri, db_name, collection_name)
         print(f"Results saved ({len(jobs)} jobs)")

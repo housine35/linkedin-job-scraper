@@ -2,7 +2,7 @@ name: Scrape LinkedIn Jobs
 
 on:
   schedule:
-    - cron: "30 * * * *"  # Tous les jours à 6h UTC
+    - cron: "30 * * * *"  # Toutes les heures à H:30 UTC
   workflow_dispatch:      # Permet aussi de le lancer manuellement
 
 jobs:
@@ -31,10 +31,14 @@ jobs:
           HOURS: 1
           MAX_JOBS: 200
           STORAGE_TYPE: mongo
-          MONGO_URI: ${{ secrets.MONGO_URI }}
-          MONGO_DB: scraping
+          MONGO_USER: ${{ secrets.MONGO_USER }}
+          MONGO_PASSWORD: ${{ secrets.MONGO_PASSWORD }}
+          MONGO_HOST: ${{ secrets.MONGO_HOST }}
+          MONGO_DB: ${{ secrets.MONGO_DB }}
           MONGO_COLLECTION: linkedin
           PROXY_URL: ${{ secrets.PROXY_URL }}
           PROXY_USERNAME: ${{ secrets.PROXY_USERNAME }}
           PROXY_PASSWORD: ${{ secrets.PROXY_PASSWORD }}
-        run: python main.py
+        run: |
+          echo "Launching scraper with MongoDB user: $MONGO_USER"
+          python main.py
