@@ -2,36 +2,39 @@ name: Scrape LinkedIn Jobs
 
 on:
   schedule:
-    - cron: "30 * * * *"  
-  workflow_dispatch:     
+    - cron: "30 * * * *"  # Tous les jours à 6h UTC
+  workflow_dispatch:      # Permet aussi de le lancer manuellement
 
 jobs:
   scrape:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-    - name: Run scraper
-      env:
-        KEYWORD: Scraping
-        LOCATION: worldwide
-        WORK_TYPE: remote
-        DAYS: 30
-        MAX_JOBS: 50
-        STORAGE_TYPE: mongodb
-        MONGO_URI: ${{ secrets.MONGO_URI }}
-        MONGO_DB: linkedin
-        MONGO_COLLECTION: scraping
-      run: |
-        python main.py
+      - name: Run scraper
+        env:
+          KEYWORD: scraping
+          LOCATION: worldwide
+          WORK_TYPE: all
+          HOURS: 1
+          MAX_JOBS: 200
+          STORAGE_TYPE: mongo
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          MONGO_DB: scraping
+          MONGO_COLLECTION: linkedin
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+          PROXY_USERNAME: ${{ secrets.PROXY_USERNAME }}
+          PROXY_PASSWORD: ${{ secrets.PROXY_PASSWORD }}
+        run: python main.py
