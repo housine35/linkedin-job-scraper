@@ -2,6 +2,7 @@ import requests
 import time
 import os
 from parser import parse_job_postings
+from urllib.parse import quote_plus
 
 
 def fetch_linkedin_jobs(
@@ -75,13 +76,18 @@ def fetch_linkedin_jobs(
     proxy_url = os.getenv("PROXY_URL")
     proxy_username = os.getenv("PROXY_USERNAME")
     proxy_password = os.getenv("PROXY_PASSWORD")
+
     if proxy_url and proxy_username and proxy_password:
-        proxy_string = f"http://{proxy_username}:{proxy_password}@{proxy_url}"
+        encoded_username = quote_plus(proxy_username)
+        encoded_password = quote_plus(proxy_password)
+        proxy_string = f"http://{encoded_username}:{encoded_password}@{proxy_url}"
         proxies = {
             "http": proxy_string,
             "https": proxy_string,
         }
         print(f"Tentative avec le proxy : {proxy_url}")
+    else:
+        proxies = None
 
     # Try with proxy first, then without if it fails
     for use_proxy in [True, False] if proxies else [False]:
