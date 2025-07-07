@@ -1,1 +1,1 @@
-# linkedin-scraper
+# linkedin-job-scraper
