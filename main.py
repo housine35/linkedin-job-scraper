@@ -6,9 +6,7 @@ from database import save_jobs
 
 def main():
     # Load the .env file
-    if not load_dotenv():
-        print("Error: Could not load .env file or it is malformed.")
-        return
+    load_dotenv() 
 
     # Read and convert environment variables
     params = {
