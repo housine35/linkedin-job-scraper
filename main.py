@@ -33,8 +33,8 @@ def main():
 
     # Configuration MongoDB sécurisée via secrets séparés
     storage_type = os.getenv("STORAGE_TYPE", "csv").lower()
-    db_name = os.getenv("MONGO_DB", "linkedin")
-    collection_name = os.getenv("MONGO_COLLECTION", "scraping")
+    db_name = os.getenv("MONGO_DB", "scraping")
+    collection_name = os.getenv("MONGO_COLLECTION", "linkedin")
     output_file = os.getenv("OUTPUT_FILE", "jobs_output.csv")
 
     mongo_uri = ""
@@ -43,7 +43,7 @@ def main():
         mongo_password = quote_plus(os.getenv("MONGO_PASSWORD", ""))
         mongo_host = os.getenv("MONGO_HOST")
         mongo_uri = f"mongodb+srv://{mongo_user}:{mongo_password}@{mongo_host}/{db_name}?retryWrites=true&w=majority"
-
+        print(f"Using MongoDB URI: {mongo_uri}")
     # Afficher les paramètres utilisés
     print(
         f"Scraping with: keyword='{params['keyword']}', location='{params['location']}', "
