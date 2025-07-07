@@ -85,9 +85,10 @@ def fetch_linkedin_jobs(
             "http": proxy_string,
             "https": proxy_string,
         }
-        print(f"Tentative avec le proxy : {proxy_url}")
+        print(f"[DEBUG] Using proxy: {proxy_string}")  # Pour vérification
     else:
         proxies = None
+        print("[DEBUG] No proxy configured.")
 
     # Try with proxy first, then without if it fails
     for use_proxy in [True, False] if proxies else [False]:

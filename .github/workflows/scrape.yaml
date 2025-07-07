@@ -40,5 +40,7 @@ jobs:
           PROXY_USERNAME: ${{ secrets.PROXY_USERNAME }}
           PROXY_PASSWORD: ${{ secrets.PROXY_PASSWORD }}
         run: |
-          echo "Launching scraper with MongoDB user: $MONGO_USER"
-          python main.py
+            echo "Proxy URL: $PROXY_URL"
+            echo "Proxy Username: $PROXY_USERNAME"
+            echo "Proxy Password: ${#PROXY_PASSWORD}"  # Affiche la longueur du mot de passe
+            python main.py
