@@ -1,0 +1,35 @@
+# Environnement virtuel
+venv/
+ENV/
+env/
+
+# Fichiers Python compilés
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Configuration d’environnement
+.env
+
+# Fichiers temporaires ou logs
+*.log
+*.tmp
+*.bak
+
+# Fichiers de sortie
+jobs_output.csv
+
+# Jupyter notebooks checkpoints (si tu ajoutes des notebooks)
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+
+# VSCode
+.vscode/
+
+# PyCharm
+.idea/
+
+# Fichiers système divers
+Thumbs.db
