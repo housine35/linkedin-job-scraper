@@ -30,6 +30,8 @@ def main():
         params["max_jobs"] = 50
 
     # Read storage configuration
+    print("MONGO_URI:", os.getenv("MONGO_URI"))
+
     storage_type = os.getenv("STORAGE_TYPE", "csv").lower()
     mongo_uri = os.getenv("MONGO_URI", "mongodb://localhost:27017")
     db_name = os.getenv("MONGO_DB", "linkedin")
