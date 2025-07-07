@@ -37,4 +37,6 @@ jobs:
           PROXY_URL: ${{ secrets.PROXY_URL }}
           PROXY_USERNAME: ${{ secrets.PROXY_USERNAME }}
           PROXY_PASSWORD: ${{ secrets.PROXY_PASSWORD }}
-        run: python main.py
+        run:
+          echo "MONGO_URI = $MONGO_URI"
+          python main.py
