@@ -80,7 +80,7 @@ def fetch_linkedin_jobs(
     if proxy_url and proxy_username and proxy_password:
         encoded_username = quote_plus(proxy_username)
         encoded_password = quote_plus(proxy_password)
-        proxy_string = f"http://{encoded_username}:{encoded_password}@{proxy_url}"
+        proxy_string = f"https://{encoded_username}:{encoded_password}@{proxy_url}"
         proxies = {
             "http": proxy_string,
             "https": proxy_string,
