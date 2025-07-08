@@ -2,7 +2,7 @@ name: Scrape LinkedIn Jobs
 
 on:
   schedule:
-    - cron: "30 * * * *"  # Toutes les heures à H:30 UTC
+    - cron: "0,30 * * * *"  # Toutes les heures à H:30 UTC
   workflow_dispatch:      # Permet aussi de le lancer manuellement
 
 jobs:
@@ -40,7 +40,5 @@ jobs:
           PROXY_USERNAME: ${{ secrets.PROXY_USERNAME }}
           PROXY_PASSWORD: ${{ secrets.PROXY_PASSWORD }}
         run: |
-            echo "Proxy URL: $PROXY_URL"
-            echo "Proxy Username: $PROXY_USERNAME"
-            echo "Proxy Password: ${#PROXY_PASSWORD}"  # Affiche la longueur du mot de passe
             python main.py
+            python update_location.py

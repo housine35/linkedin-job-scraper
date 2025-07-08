@@ -2,81 +2,42 @@ import os
 import logging
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
-from dotenv import load_dotenv
 import pycountry
 import pycountry_convert
+import urllib
 
-# Configure logging
-logging.basicConfig(
-    filename="location_update_errors.log",
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
+# Chargement du fichier .env uniquement si on n'est pas sur GitHub Actions
+if os.getenv("GITHUB_ACTIONS") is None:
+    from dotenv import load_dotenv
+    load_dotenv()
 
-# Load environment variables
-load_dotenv()
+# Configuration du logging
+logging.basicConfig(filename='location_update_errors.log', level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Dictionary of US state abbreviations
+# Dictionnaire des états américains
 US_STATES = {
-    "AL": "United States",
-    "AK": "United States",
-    "AZ": "United States",
-    "AR": "United States",
-    "CA": "United States",
-    "CO": "United States",
-    "CT": "United States",
-    "DE": "United States",
-    "FL": "United States",
-    "GA": "United States",
-    "HI": "United States",
-    "ID": "United States",
-    "IL": "United States",
-    "IN": "United States",
-    "IA": "United States",
-    "KS": "United States",
-    "KY": "United States",
-    "LA": "United States",
-    "ME": "United States",
-    "MD": "United States",
-    "MA": "United States",
-    "MI": "United States",
-    "MN": "United States",
-    "MS": "United States",
-    "MO": "United States",
-    "MT": "United States",
-    "NE": "United States",
-    "NV": "United States",
-    "NH": "United States",
-    "NJ": "United States",
-    "NM": "United States",
-    "NY": "United States",
-    "NC": "United States",
-    "ND": "United States",
-    "OH": "United States",
-    "OK": "United States",
-    "OR": "United States",
-    "PA": "United States",
-    "RI": "United States",
-    "SC": "United States",
-    "SD": "United States",
-    "TN": "United States",
-    "TX": "United States",
-    "UT": "United States",
-    "VT": "United States",
-    "VA": "United States",
-    "WA": "United States",
-    "WV": "United States",
-    "WI": "United States",
-    "WY": "United States",
+    'AL': 'United States', 'AK': 'United States', 'AZ': 'United States', 'AR': 'United States',
+    'CA': 'United States', 'CO': 'United States', 'CT': 'United States', 'DE': 'United States',
+    'FL': 'United States', 'GA': 'United States', 'HI': 'United States', 'ID': 'United States',
+    'IL': 'United States', 'IN': 'United States', 'IA': 'United States', 'KS': 'United States',
+    'KY': 'United States', 'LA': 'United States', 'ME': 'United States', 'MD': 'United States',
+    'MA': 'United States', 'MI': 'United States', 'MN': 'United States', 'MS': 'United States',
+    'MO': 'United States', 'MT': 'United States', 'NE': 'United States', 'NV': 'United States',
+    'NH': 'United States', 'NJ': 'United States', 'NM': 'United States', 'NY': 'United States',
+    'NC': 'United States', 'ND': 'United States', 'OH': 'United States', 'OK': 'United States',
+    'OR': 'United States', 'PA': 'United States', 'RI': 'United States', 'SC': 'United States',
+    'SD': 'United States', 'TN': 'United States', 'TX': 'United States', 'UT': 'United States',
+    'VT': 'United States', 'VA': 'United States', 'WA': 'United States', 'WV': 'United States',
+    'WI': 'United States', 'WY': 'United States'
 }
 
 
-# Function to extract country from location string
 def extract_country(location):
     if not location or location.lower() in ["remote", "unknown", ""]:
         return None
 
-    parts = [part.strip() for part in location.split(",")]
+    parts = [part.strip() for part in location.split(',')]
     if not parts:
         return None
 
@@ -127,7 +88,6 @@ def extract_country(location):
     return country
 
 
-# Function to get country and continent
 def get_country_continent(location):
     if location.lower() in ["remote", "unknown", ""]:
         logging.info(f"Ambiguous location '{location}', returning null values")
@@ -140,12 +100,8 @@ def get_country_continent(location):
 
     try:
         country_data = pycountry.countries.search_fuzzy(country)[0]
-        continent_code = pycountry_convert.country_alpha2_to_continent_code(
-            country_data.alpha_2
-        )
-        continent = pycountry_convert.convert_continent_code_to_continent_name(
-            continent_code
-        )
+        continent_code = pycountry_convert.country_alpha2_to_continent_code(country_data.alpha_2)
+        continent = pycountry_convert.convert_continent_code_to_continent_name(continent_code)
     except (LookupError, KeyError):
         logging.warning(f"Could not identify continent for country '{country}'")
         return None, None
@@ -154,14 +110,22 @@ def get_country_continent(location):
     return country, continent
 
 
-# Function to connect to MongoDB and update documents
+def get_mongo_client():
+    mongo_user = urllib.parse.quote_plus(os.getenv("MONGO_USER"))
+    mongo_password = urllib.parse.quote_plus(os.getenv("MONGO_PASSWORD"))
+    mongo_host = os.getenv("MONGO_HOST")
+    mongo_db = os.getenv("MONGO_DB", "scraping")
+
+    mongo_uri = f"mongodb+srv://{mongo_user}:{mongo_password}@{mongo_host}/{mongo_db}?retryWrites=true&w=majority"
+    return MongoClient(mongo_uri)
+
+
 def update_locations():
-    mongo_uri = os.getenv("MONGO_URI")
     db_name = os.getenv("MONGO_DB", "scraping")
     collection_name = os.getenv("MONGO_COLLECTION", "linkedin")
 
     try:
-        client = MongoClient(mongo_uri)
+        client = get_mongo_client()
         db = client[db_name]
         collection = db[collection_name]
 
@@ -173,51 +137,37 @@ def update_locations():
         for doc in documents:
             location = doc.get("location")
             if not location:
-                logging.info(
-                    f"Skipping document with missing location: {doc.get('_id')}"
-                )
+                logging.info(f"Skipping document with missing location: {doc.get('_id')}")
                 skipped_count += 1
                 continue
 
             country, continent = get_country_continent(location)
 
             if country is None and continent is None:
-                failed_locations.append((doc["_id"], location))
+                failed_locations.append((doc['_id'], location))
                 skipped_count += 1
                 continue
 
             try:
                 result = collection.update_one(
                     {"_id": doc["_id"]},
-                    {"$set": {"country": country, "continent": continent}},
+                    {"$set": {"country": country, "continent": continent}}
                 )
                 if result.modified_count > 0:
                     updated_count += 1
-                    print(
-                        f"Updated document with ID: {doc['_id']} (country: {country}, continent: {continent})"
-                    )
+                    print(f"Updated document with ID: {doc['_id']} (country: {country}, continent: {continent})")
                 else:
                     skipped_count += 1
                     print(f"No update needed for document with ID: {doc['_id']}")
             except Exception as e:
-                logging.error(
-                    f"Error updating document with ID: {doc['_id']}: {str(e)}"
-                )
+                logging.error(f"Error updating document with ID: {doc['_id']}: {str(e)}")
                 skipped_count += 1
 
-        print(
-            f"Updated {updated_count} documents with country and continent in MongoDB."
-        )
-        print(
-            f"Skipped {skipped_count} documents (missing location, no update needed, or failed processing)"
-        )
+        print(f"Updated {updated_count} documents with country and continent in MongoDB.")
+        print(f"Skipped {skipped_count} documents (missing location, no update needed, or failed processing)")
         if failed_locations:
-            logging.info(
-                f"Failed to process {len(failed_locations)} locations: {failed_locations}"
-            )
-            print(
-                f"Failed to process {len(failed_locations)} locations. Check 'location_update_errors.log' for details."
-            )
+            logging.info(f"Failed to process {len(failed_locations)} locations: {failed_locations}")
+            print(f"Failed to process {len(failed_locations)} locations. Check 'location_update_errors.log' for details.")
 
         client.close()
 
@@ -227,44 +177,42 @@ def update_locations():
         logging.error(f"Error processing MongoDB updates: {e}")
 
 
-# Function to clean MongoDB by removing documents with title containing 'meat market'
 def clean_db():
-    mongo_uri = os.getenv(
-        "mongodb+srv://redsdz:Foot199407%40%23@cluster0.ypgrqjo.mongodb.net/linkedin?retryWrites=true&w=majority"
-    )
     db_name = os.getenv("MONGO_DB", "scraping")
     collection_name = os.getenv("MONGO_COLLECTION", "linkedin")
 
     try:
-        client = MongoClient(mongo_uri)
+        client = get_mongo_client()
         db = client[db_name]
         collection = db[collection_name]
 
         logging.info(f"Accessing database: {db_name}, collection: {collection_name}")
 
-        query = {"title": {"$regex": "meat market", "$options": "i"}}
-        matching_documents = collection.count_documents(query)
-        if matching_documents == 0:
-            logging.warning("No documents found with title containing 'meat market'.")
-            print("No documents found with title containing 'meat market'.")
-        else:
-            logging.info(
-                f"Found {matching_documents} documents with title containing 'meat market'."
-            )
+        # Nouvelle requête combinée
+        query = {
+            "$or": [
+                {"title": {"$regex": "meat market", "$options": "i"}},
+                {"title": {"$regex": "Laborer and Painter", "$options": "i"}}
+            ]
+        }
 
-        sample_docs = collection.find().limit(5)
+        matching_documents = collection.count_documents(query)
+
+        if matching_documents == 0:
+            logging.warning("No documents found matching query.")
+            print("No documents found with specified titles.")
+        else:
+            logging.info(f"Found {matching_documents} matching documents.")
+
+        sample_docs = collection.find(query).limit(5)
         for doc in sample_docs:
             title = doc.get("title", "No title field")
             logging.info(f"Sample document ID: {doc.get('_id')}, title: {title}")
 
         result = collection.delete_many(query)
 
-        print(
-            f"Deleted {result.deleted_count} documents where title contains 'meat market'."
-        )
-        logging.info(
-            f"Deleted {result.deleted_count} documents where title contains 'meat market'."
-        )
+        print(f"Deleted {result.deleted_count} documents matching query.")
+        logging.info(f"Deleted {result.deleted_count} documents matching query.")
 
         client.close()
 
@@ -274,6 +222,7 @@ def clean_db():
     except Exception as e:
         logging.error(f"Error cleaning MongoDB: {e}")
         print(f"Error cleaning MongoDB: {str(e)}")
+
 
 
 if __name__ == "__main__":
