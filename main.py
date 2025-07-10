@@ -15,9 +15,9 @@ def main():
         "keyword": os.getenv("KEYWORD", "Scraping"),
         "location": os.getenv("LOCATION", "worldwide"),
         "work_type": os.getenv("WORK_TYPE", "remote"),
-        "hours": None,
-        "days": 30,
-        "max_jobs": 100,
+        "hours": 5,
+        "days": 1,
+        "max_jobs": 200,
     }
 
     try:
