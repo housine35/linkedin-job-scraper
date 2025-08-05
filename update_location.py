@@ -192,8 +192,9 @@ def clean_db():
         query = {
             "$or": [
                 {"title": {"$regex": "meat market", "$options": "i"}},
-                {"title": {"$regex": "Laborer", "$options": "i"}},
-                {"title": {"$regex": "Painter", "$options": "i"}}
+                {"title": {"$regex": "painter", "$options": "i"}},
+                {"title": {"$regex": "laborer", "$options": "i"}},
+                {"title": {"$regex": "cleaner", "$options": "i"}}
             ]
         }
 

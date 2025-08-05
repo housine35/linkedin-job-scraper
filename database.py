@@ -125,8 +125,8 @@ def save_jobs_to_csv(jobs, output_file):
 def save_jobs_to_mongo(
     jobs,
     mongo_uri="mongodb://localhost:27017",
-    db_name="linkedin",
-    collection_name="scraping",
+    db_name="scraping",
+    collection_name="linkedin",
 ):
     """
     Saves the list of job postings to a MongoDB collection, enforcing uniqueness on the '_id' field (normalized URL).
