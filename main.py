@@ -10,18 +10,16 @@ def main():
     if os.getenv("GITHUB_ACTIONS") != "true":
         load_dotenv()
 
-    # Lire et convertir les variables d'environnement
-    # Convertir KEYWORD en liste
-    keyword_input = os.getenv("KEYWORD", "Scraping")
-    keywords = [k.strip() for k in keyword_input.split(",")]  # Divise la chaîne en liste et supprime les espaces
+    # Liste de mots-clés définie directement dans le script
+    keywords = ["scraping", "crawling"]
 
+    # Paramètres de base
     params = {
-        "keywords": keywords,  # Utiliser une liste de mots-clés
         "location": os.getenv("LOCATION", "worldwide"),
         "work_type": os.getenv("WORK_TYPE", "remote"),
-        "hours": None,
-        "days": 30,
-        "max_jobs": 100,
+        "hours": 5,
+        "days": 1,
+        "max_jobs": 200,
     }
 
     try:
@@ -51,27 +49,30 @@ def main():
 
     # Afficher les paramètres utilisés
     print(
-        f"Scraping with: keywords={params['keywords']}, location='{params['location']}', "
+        f"Scraping with: keywords={keywords}, location='{params['location']}', "
         f"hours={params['hours']}, days={params['days']}, work_type='{params['work_type']}', "
         f"max_jobs={params['max_jobs']}, storage_type='{storage_type}'"
     )
     print(f"Mongo URI used: {mongo_uri if mongo_uri else 'Not used'}")
 
-    # Lancer le scraping
-    jobs = []
-    for keyword in params["keywords"]:
-        # Mettre à jour le paramètre keyword pour chaque itération
-        single_keyword_params = params.copy()
-        single_keyword_params["keyword"] = keyword
+    # Lancer le scraping pour chaque mot-clé
+    all_jobs = []
+    for keyword in keywords:
         print(f"Scraping jobs for keyword: {keyword}")
-        # Supprimer la clé 'keywords' pour éviter des erreurs dans scrape_all_jobs
-        single_keyword_params.pop("keywords", None)
-        jobs.extend(scrape_all_jobs(**single_keyword_params))
+        # Ajouter le mot-clé courant aux paramètres
+        current_params = params.copy()
+        current_params["keyword"] = keyword
+        jobs = scrape_all_jobs(**current_params)
+        all_jobs.extend(jobs)
+
+    # Dédoublonner les jobs par URL pour éviter les doublons
+    unique_jobs = {job["url"]: job for job in all_jobs}.values()
+    all_jobs = list(unique_jobs)
 
     # Sauvegarder les résultats
-    if jobs:
-        save_jobs(jobs, storage_type, output_file, mongo_uri, db_name, collection_name)
-        print(f"Results saved ({len(jobs)} jobs)")
+    if all_jobs:
+        save_jobs(all_jobs, storage_type, output_file, mongo_uri, db_name, collection_name)
+        print(f"Results saved ({len(all_jobs)} jobs)")
     else:
         print("No jobs found.")
 
