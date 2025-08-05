@@ -228,5 +228,5 @@ def clean_db():
 
 
 if __name__ == "__main__":
-    update_locations()
+    #update_locations()
     clean_db()

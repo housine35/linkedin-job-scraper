@@ -159,7 +159,7 @@ def scrape_all_jobs(
             print("No more data or error occurred.")
             break
 
-        jobs = parse_job_postings(job_postings_html)
+        jobs = parse_job_postings(job_postings_html, keyword)  # Passer le keyword
 
         if not jobs:  # If no jobs are found, stop
             print("No more jobs found.")
