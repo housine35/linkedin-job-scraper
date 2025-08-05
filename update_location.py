@@ -192,7 +192,8 @@ def clean_db():
         query = {
             "$or": [
                 {"title": {"$regex": "meat market", "$options": "i"}},
-                {"title": {"$regex": "Laborer and Painter", "$options": "i"}}
+                {"title": {"$regex": "Laborer", "$options": "i"}},
+                {"title": {"$regex": "Painter", "$options": "i"}}
             ]
         }
 
@@ -226,5 +227,5 @@ def clean_db():
 
 
 if __name__ == "__main__":
-    update_locations()
+    #update_locations()
     clean_db()

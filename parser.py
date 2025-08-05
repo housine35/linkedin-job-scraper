@@ -52,19 +52,22 @@ def convert_relative_time(relative_time_str, current_time=None):
     return exact_time.strftime("%Y-%m-%d %H:%M:%S")
 
 
-def parse_job_postings(job_postings_html):
+def parse_job_postings(job_postings_html, keyword):
     """
     Parses the HTML content to extract job postings.
 
     Args:
         job_postings_html (str): The raw HTML content of the job listings.
+        keyword (str): The keyword used for the job search (e.g., 'scraping').
 
     Returns:
         list: A list of dictionaries containing job details.
     """
     if not job_postings_html:
         return []
-
+    if 'algérie' in job_postings_html.lower():
+        print("Warning: Job postings from Algeria detected. Skipping parsing.")
+        return []
     job_postings = []
     soup = BeautifulSoup(job_postings_html, "html.parser")
     job_card_elements = soup.select("div.base-card")
@@ -85,7 +88,7 @@ def parse_job_postings(job_postings_html):
 
         company_element = job_card.select_one("a.hidden-nested-link")
         company = company_element.text.strip() if company_element else None
-
+        print(company)
         location_element = job_card.select_one("span.job-search-card__location")
         location = location_element.text.strip() if location_element else None
 
@@ -107,6 +110,7 @@ def parse_job_postings(job_postings_html):
             "location": location,
             "posting_time": exact_posting_time,  # New field for exact datetime
             "status": status,
+            "source": keyword,  # Ajout du champ source avec le mot-clé
         }
         job_postings.append(job_posting)
 
