@@ -1,6 +1,8 @@
 import os
+import re
 import logging
-from pymongo import MongoClient
+from functools import lru_cache
+from pymongo import MongoClient, UpdateOne
 from pymongo.errors import ConnectionFailure
 import pycountry
 import pycountry_convert
@@ -11,9 +13,16 @@ if os.getenv("GITHUB_ACTIONS") is None:
     from dotenv import load_dotenv
     load_dotenv()
 
-# Configuration du logging
-logging.basicConfig(filename='location_update_errors.log', level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+# Logging: WARNING par défaut pour éviter de gonfler le fichier de log
+# (l'ancienne version logguait chaque succès en INFO -> ~1 Mo de bruit).
+logging.basicConfig(
+    filename="location_update_errors.log",
+    level=logging.WARNING,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+
+# Taille des lots pour les écritures groupées MongoDB
+BULK_BATCH_SIZE = 500
 
 # Dictionnaire des états américains
 US_STATES = {
@@ -32,17 +41,65 @@ US_STATES = {
     'WI': 'United States', 'WY': 'United States'
 }
 
+# Cas particuliers connus (métropoles / formulations LinkedIn ambiguës)
+SPECIAL_CASES = {
+    "Greater Buenos Aires": "Argentina",
+    "Mumbai Metropolitan Region": "India",
+    "London Area, United Kingdom": "United Kingdom",
+    "New York City Metropolitan Area": "United States",
+    "Mountain View, CA": "United States",
+    "San Francisco, CA": "United States",
+    "San Diego, CA": "United States",
+    "Manhattan Beach, CA": "United States",
+    "Columbus, OH": "United States",
+    "New York, NY": "United States",
+    "Salt Lake City, UT": "United States",
+    "Draper, UT": "United States",
+    "Houston, TX": "United States",
+    "Grand Prairie, TX": "United States",
+    "Greater Montpellier Metropolitan Area": "France",
+    "Greater Lyon Area": "France",
+    "Greater Tokyo Area": "Japan",
+    "Greater São Paulo Area": "Brazil",
+    "Greater Paris Metropolitan Region": "France",
+}
+
+# ---------------------------------------------------------------------------
+# Allowlist IT : un titre est considéré "pertinent" s'il contient au moins un
+# de ces termes (recherche insensible à la casse, à frontières de mots).
+# Bien plus maintenable et sûr que l'ancienne blocklist de ~80 regex non-IT.
+# ---------------------------------------------------------------------------
+IT_KEYWORDS = [
+    r"developer", r"développeur", r"engineer", r"engineering", r"software",
+    r"backend", r"back[- ]?end", r"frontend", r"front[- ]?end", r"full[- ]?stack",
+    r"devops", r"sre", r"site reliability", r"platform",
+    r"data engineer", r"data scientist", r"data analyst", r"machine learning",
+    r"ml", r"ai", r"artificial intelligence", r"deep learning", r"nlp",
+    r"python", r"java", r"javascript", r"typescript", r"golang", r"go",
+    r"rust", r"c\+\+", r"c#", r"\.net", r"php", r"ruby", r"scala", r"kotlin",
+    r"react", r"angular", r"vue", r"node", r"django", r"flask", r"fastapi",
+    r"scraping", r"crawling", r"web scraping", r"reverse engineer",
+    r"cloud", r"aws", r"azure", r"gcp", r"kubernetes", r"docker", r"terraform",
+    r"database", r"sql", r"nosql", r"mongodb", r"postgres", r"elasticsearch",
+    r"qa engineer", r"test automation", r"sdet", r"cyber", r"security engineer",
+    r"architect", r"tech lead", r"cto", r"programmer", r"automation",
+]
+IT_REGEX = re.compile(r"\b(?:" + "|".join(IT_KEYWORDS) + r")\b", re.IGNORECASE)
+
 
 def extract_country(location):
     if not location or location.lower() in ["remote", "unknown", ""]:
         return None
+
+    # Les cas particuliers priment (formulations ambiguës de LinkedIn)
+    if location in SPECIAL_CASES:
+        return SPECIAL_CASES[location]
 
     parts = [part.strip() for part in location.split(',')]
     if not parts:
         return None
 
     potential_country = parts[-1]
-    country = None
 
     if potential_country in US_STATES:
         return US_STATES[potential_country]
@@ -50,47 +107,24 @@ def extract_country(location):
     try:
         country_data = pycountry.countries.search_fuzzy(potential_country)
         if country_data:
-            country = country_data[0].name
+            return country_data[0].name
     except LookupError:
         for part in reversed(parts[:-1]):
             try:
                 country_data = pycountry.countries.search_fuzzy(part)
                 if country_data:
-                    country = country_data[0].name
-                    break
+                    return country_data[0].name
             except LookupError:
                 continue
 
-    special_cases = {
-        "Greater Buenos Aires": "Argentina",
-        "Mumbai Metropolitan Region": "India",
-        "London Area, United Kingdom": "United Kingdom",
-        "New York City Metropolitan Area": "United States",
-        "Mountain View, CA": "United States",
-        "San Francisco, CA": "United States",
-        "San Diego, CA": "United States",
-        "Manhattan Beach, CA": "United States",
-        "Columbus, OH": "United States",
-        "New York, NY": "United States",
-        "Salt Lake City, UT": "United States",
-        "Draper, UT": "United States",
-        "Houston, TX": "United States",
-        "Grand Prairie, TX": "United States",
-        "Greater Montpellier Metropolitan Area": "France",
-        "Greater Lyon Area": "France",
-        "Greater Tokyo Area": "Japan",
-        "Greater São Paulo Area": "Brazil",
-        "Greater Paris Metropolitan Region": "France",
-    }
-    if location in special_cases:
-        country = special_cases[location]
-
-    return country
+    return None
 
 
+@lru_cache(maxsize=None)
 def get_country_continent(location):
-    if location.lower() in ["remote", "unknown", ""]:
-        logging.info(f"Ambiguous location '{location}', returning null values")
+    # Mémoïsé : de nombreuses offres partagent la même localisation, ce qui
+    # évite des milliers d'appels redondants au fuzzy search (lent) de pycountry.
+    if not location or location.lower() in ["remote", "unknown", ""]:
         return None, None
 
     country = extract_country(location)
@@ -104,9 +138,8 @@ def get_country_continent(location):
         continent = pycountry_convert.convert_continent_code_to_continent_name(continent_code)
     except (LookupError, KeyError):
         logging.warning(f"Could not identify continent for country '{country}'")
-        return None, None
+        return country, None
 
-    logging.info(f"Success for location '{location}': {country}, {continent}")
     return country, continent
 
 
@@ -120,113 +153,123 @@ def get_mongo_client():
     return MongoClient(mongo_uri)
 
 
+def _flush(collection, ops):
+    """Exécute un lot d'opérations bulk et renvoie le nombre de documents modifiés."""
+    if not ops:
+        return 0
+    result = collection.bulk_write(ops, ordered=False)
+    return result.modified_count
+
+
 def update_locations():
+    """
+    Enrichit chaque offre avec son pays et son continent.
+
+    Incrémental : ne traite que les documents jamais géocodés (champ
+    `geo_checked` absent). Chaque document traité est marqué `geo_checked: True`
+    — même en cas d'échec — pour ne plus jamais le re-scanner. Écritures
+    groupées via bulk_write pour limiter les aller-retours réseau.
+    """
     db_name = os.getenv("MONGO_DB", "scraping")
     collection_name = os.getenv("MONGO_COLLECTION", "linkedin")
 
     try:
         client = get_mongo_client()
-        db = client[db_name]
-        collection = db[collection_name]
+        collection = client[db_name][collection_name]
 
-        documents = collection.find()
-        updated_count = 0
-        skipped_count = 0
-        failed_locations = []
+        query = {"geo_checked": {"$ne": True}}
+        cursor = collection.find(query, {"_id": 1, "location": 1})
 
-        for doc in documents:
+        ops = []
+        updated = 0
+        scanned = 0
+        unresolved = 0
+
+        for doc in cursor:
+            scanned += 1
             location = doc.get("location")
-            if not location:
-                logging.info(f"Skipping document with missing location: {doc.get('_id')}")
-                skipped_count += 1
-                continue
-
-            country, continent = get_country_continent(location)
-
+            country, continent = get_country_continent(location) if location else (None, None)
             if country is None and continent is None:
-                failed_locations.append((doc['_id'], location))
-                skipped_count += 1
-                continue
+                unresolved += 1
 
-            try:
-                result = collection.update_one(
+            ops.append(
+                UpdateOne(
                     {"_id": doc["_id"]},
-                    {"$set": {"country": country, "continent": continent}}
+                    {"$set": {"country": country, "continent": continent, "geo_checked": True}},
                 )
-                if result.modified_count > 0:
-                    updated_count += 1
-                    print(f"Updated document with ID: {doc['_id']} (country: {country}, continent: {continent})")
-                else:
-                    skipped_count += 1
-                    print(f"No update needed for document with ID: {doc['_id']}")
-            except Exception as e:
-                logging.error(f"Error updating document with ID: {doc['_id']}: {str(e)}")
-                skipped_count += 1
+            )
 
-        print(f"Updated {updated_count} documents with country and continent in MongoDB.")
-        print(f"Skipped {skipped_count} documents (missing location, no update needed, or failed processing)")
-        if failed_locations:
-            logging.info(f"Failed to process {len(failed_locations)} locations: {failed_locations}")
-            print(f"Failed to process {len(failed_locations)} locations. Check 'location_update_errors.log' for details.")
+            if len(ops) >= BULK_BATCH_SIZE:
+                updated += _flush(collection, ops)
+                ops = []
 
+        updated += _flush(collection, ops)
+
+        print(
+            f"Geo enrichment done: scanned={scanned}, updated={updated}, unresolved={unresolved}"
+        )
         client.close()
 
     except ConnectionFailure as e:
         logging.error(f"Error connecting to MongoDB: {e}")
+        print(f"Error connecting to MongoDB: {e}")
     except Exception as e:
         logging.error(f"Error processing MongoDB updates: {e}")
+        print(f"Error processing MongoDB updates: {e}")
 
 
-def clean_db():
+def tag_relevance():
+    """
+    Tague chaque offre avec `relevant: True/False` selon l'allowlist IT.
+
+    Non destructif (remplace l'ancien clean_db qui faisait delete_many).
+    Incrémental : ne traite que les documents non encore tagués (`relevant`
+    absent). Le portfolio peut ensuite filtrer sur `relevant: True`.
+    """
     db_name = os.getenv("MONGO_DB", "scraping")
     collection_name = os.getenv("MONGO_COLLECTION", "linkedin")
 
     try:
         client = get_mongo_client()
-        db = client[db_name]
-        collection = db[collection_name]
+        collection = client[db_name][collection_name]
 
-        logging.info(f"Accessing database: {db_name}, collection: {collection_name}")
+        query = {"relevant": {"$exists": False}}
+        cursor = collection.find(query, {"_id": 1, "title": 1})
 
-        # Nouvelle requête combinée
-        query = {
-            "$or": [
-                {"title": {"$regex": "meat market", "$options": "i"}},
-                {"title": {"$regex": "painter", "$options": "i"}},
-                {"title": {"$regex": "laborer", "$options": "i"}},
-                {"title": {"$regex": "cleaner", "$options": "i"}}
-            ]
-        }
+        ops = []
+        scanned = 0
+        relevant_count = 0
 
-        matching_documents = collection.count_documents(query)
+        for doc in cursor:
+            scanned += 1
+            title = doc.get("title") or ""
+            is_relevant = bool(IT_REGEX.search(title))
+            if is_relevant:
+                relevant_count += 1
+            ops.append(
+                UpdateOne({"_id": doc["_id"]}, {"$set": {"relevant": is_relevant}})
+            )
 
-        if matching_documents == 0:
-            logging.warning("No documents found matching query.")
-            print("No documents found with specified titles.")
-        else:
-            logging.info(f"Found {matching_documents} matching documents.")
+            if len(ops) >= BULK_BATCH_SIZE:
+                _flush(collection, ops)
+                ops = []
 
-        sample_docs = collection.find(query).limit(5)
-        for doc in sample_docs:
-            title = doc.get("title", "No title field")
-            logging.info(f"Sample document ID: {doc.get('_id')}, title: {title}")
+        _flush(collection, ops)
 
-        result = collection.delete_many(query)
-
-        print(f"Deleted {result.deleted_count} documents matching query.")
-        logging.info(f"Deleted {result.deleted_count} documents matching query.")
-
+        print(
+            f"Relevance tagging done: scanned={scanned}, "
+            f"relevant={relevant_count}, non_relevant={scanned - relevant_count}"
+        )
         client.close()
 
     except ConnectionFailure as e:
-        logging.error(f"Error connecting to MongoDB for cleaning: {e}")
-        print(f"Error connecting to MongoDB: {str(e)}")
+        logging.error(f"Error connecting to MongoDB for tagging: {e}")
+        print(f"Error connecting to MongoDB: {e}")
     except Exception as e:
-        logging.error(f"Error cleaning MongoDB: {e}")
-        print(f"Error cleaning MongoDB: {str(e)}")
-
+        logging.error(f"Error tagging MongoDB documents: {e}")
+        print(f"Error tagging MongoDB documents: {e}")
 
 
 if __name__ == "__main__":
-    #update_locations()
-    clean_db()
+    update_locations()
+    tag_relevance()
